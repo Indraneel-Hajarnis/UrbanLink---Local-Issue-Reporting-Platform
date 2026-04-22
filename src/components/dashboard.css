@@ -151,6 +151,32 @@ body {
   box-shadow: 0 4px 12px rgba(255,153,51,0.35);
 }
 
+/* Global status/resolution buttons */
+.resolution-btn {
+  background: var(--white);
+  border: 1px solid var(--border);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+  text-align: center;
+  color: var(--text-mid);
+}
+
+.resolution-btn:hover {
+  background: var(--blue-light);
+  border-color: var(--blue-mid);
+  color: var(--blue-deep);
+  transform: translateY(-1px);
+}
+
+.resolution-btn.active-pending  { background: #fff0f0; color: #dc3545; border-color: #dc3545; }
+.resolution-btn.active-progress { background: #fff4e6; color: #FF9933; border-color: #FF9933; }
+.resolution-btn.active-resolved { background: #f0fff4; color: #138808; border-color: #138808; }
+
 /* ─── MAIN CONTENT ─── */
 .dashboard-content {
   width: 100%;

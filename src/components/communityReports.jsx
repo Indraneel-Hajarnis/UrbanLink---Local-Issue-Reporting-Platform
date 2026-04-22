@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './dashboard.css'; // Reuse dashboard styles
+import Navbar from './navbar';
 
 const API = 'http://localhost:5000';
 
@@ -51,20 +52,7 @@ export default function CommunityReports() {
 
   return (
     <div className="dashboard">
-      <nav className="navbar">
-        <div className="navbar-brand" onClick={() => navigate('/dashboard')} style={{cursor:'pointer'}}>
-          <div className="brand-icon">🏛️</div>
-          <div>
-            <h1>UrbanLink</h1>
-            <span className="tagline">Civic Issue Reporting Portal</span>
-          </div>
-        </div>
-        <div className="navbar-right">
-          <button className="nav-link-btn" onClick={() => navigate('/dashboard')}>Dashboard</button>
-          <button className="nav-link-btn" onClick={() => navigate('/analytics')}>Analytics</button>
-          <button className="logout-btn" onClick={() => { localStorage.clear(); navigate('/'); }}>Logout</button>
-        </div>
-      </nav>
+      <Navbar />
 
       <div className="dashboard-content">
         <div className="section-title">Community Issue Reports</div>
@@ -78,7 +66,8 @@ export default function CommunityReports() {
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
                 width:'100%', padding:'12px 16px', borderRadius:10, 
-                border:'1px solid var(--border)', fontSize:14, outline:'none'
+                border:'1px solid var(--border)', fontSize:14, outline:'none',
+                background: 'white', color: 'var(--text-dark)'
               }}
             />
           </div>
@@ -88,7 +77,8 @@ export default function CommunityReports() {
               onChange={(e) => setWardFilter(e.target.value)}
               style={{
                 width:'100%', padding:'12px 16px', borderRadius:10, 
-                border:'1px solid var(--border)', fontSize:14, outline:'none', background:'white'
+                border:'1px solid var(--border)', fontSize:14, outline:'none', 
+                background:'white', color: 'var(--text-dark)'
               }}
             >
               <option value="All">All Wards</option>

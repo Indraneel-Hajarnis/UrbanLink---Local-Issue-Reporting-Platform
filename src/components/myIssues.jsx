@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import "./index.css";
+import './dashboard.css';
+import Navbar from './navbar';
 
 const API = 'http://localhost:5000';
 
@@ -53,22 +54,8 @@ export default function MyIssues() {
   const statusClass = (s) => s.replace(' ', '-');
 
   return (
-    <div>
-      <nav className="navbar">
-        <div className="navbar-brand">
-          <div className="brand-icon">🏛️</div>
-          <div><h1>UrbanLink</h1><span className="tagline">Civic Issue Reporting Portal</span></div>
-        </div>
-        <div className="navbar-right">
-          <div className="navbar-user">
-            <div className="user-avatar">{getInitials(userName)}</div>
-            <span>{userName}</span>
-          </div>
-          <button className="nav-btn" onClick={() => navigate('/dashboard')}>Dashboard</button>
-          <button className="nav-btn" onClick={() => navigate('/report-issue')}>+ Report Issue</button>
-          <button className="nav-btn logout" onClick={() => { localStorage.clear(); navigate('/'); }}>Logout</button>
-        </div>
-      </nav>
+    <div className="dashboard">
+      <Navbar />
 
       <div className="page-content wide">
 

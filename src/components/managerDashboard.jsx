@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './dashboard.css';
+import Navbar from './navbar';
 
 const API = 'http://localhost:5000';
 
@@ -45,14 +46,18 @@ export default function ManagerDashboard() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status: newStatus })
       });
+      const data = await res.json();
       if (res.ok) {
         fetchWardIssues(); // refresh
         if (selectedIssue && selectedIssue.id === id) {
           setSelectedIssue(prev => ({ ...prev, status: newStatus }));
         }
+      } else {
+        alert(`Error: ${data.message || 'Status update failed'}`);
       }
     } catch (err) {
       console.error(err);
+      alert('Network error while updating status.');
     }
   };
 
@@ -60,19 +65,7 @@ export default function ManagerDashboard() {
 
   return (
     <div className="dashboard">
-       <nav className="navbar" style={{borderBottom:'4px solid var(--green)'}}>
-        <div className="navbar-brand">
-          <div className="brand-icon">🛡️</div>
-          <div>
-            <h1>Ward Manager</h1>
-            <span className="tagline">Operating in: {managedWard}</span>
-          </div>
-        </div>
-        <div className="navbar-right">
-          <button className="nav-link-btn" onClick={() => navigate('/ward-analytics')}>Ward Stats</button>
-          <button className="logout-btn" onClick={() => { localStorage.clear(); navigate('/'); }}>Logout</button>
-        </div>
-      </nav>
+       <Navbar />
 
       <div className="dashboard-content">
         <div className="section-title">Maintenance Queue – {managedWard}</div>
@@ -121,7 +114,7 @@ export default function ManagerDashboard() {
           <div className="card" style={{width:'90%', maxWidth:700, maxHeight:'90vh', overflow:'auto', padding:0, borderRadius:20}}>
              <div style={{padding:'20px 30px', borderBottom:'1px solid var(--border)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                 <h2 style={{fontFamily:'Playfair Display'}}>Issue Details: {selectedIssue.id.slice(0,8)}</h2>
-                <button onClick={() => setSelectedIssue(null)} style={{background:'none', border:'none', fontSize:24, cursor:'pointer'}}>×</button>
+                <button onClick={() => setSelectedIssue(null)} style={{background:'none', border:'none', fontSize:28, cursor:'pointer', color: 'var(--text-dark)', opacity: 0.7}}>×</button>
              </div>
              
              <div style={{padding:30}}>
@@ -149,11 +142,26 @@ export default function ManagerDashboard() {
 
                 <div style={{marginTop:30, padding:20, background:'var(--blue-light)', borderRadius:12}}>
                    <h4 style={{marginBottom:8, fontSize:13, color:'var(--blue-deep)'}}>Update Resolution Status</h4>
-                   <div style={{display:'flex', gap:10}}>
-                      <button className="nav-link-btn" style={{flex:1, border:'1px solid var(--border)'}} onClick={() => handleUpdateStatus(selectedIssue.id, 'Pending')}>Set Pending</button>
-                      <button className="nav-link-btn" style={{flex:1, border:'1px solid var(--border)', color:'var(--saffron-dark)'}} onClick={() => handleUpdateStatus(selectedIssue.id, 'In Progress')}>In Progress</button>
-                      <button className="nav-link-btn" style={{flex:1, border:'1px solid var(--green)', color:'var(--green)'}} onClick={() => handleUpdateStatus(selectedIssue.id, 'Resolved')}>Resolve Issue</button>
-                   </div>
+                    <div style={{display:'flex', gap:10}}>
+                      <button 
+                        className={`resolution-btn ${selectedIssue.status === 'Pending' ? 'active-pending' : ''}`} 
+                        onClick={(e) => { e.stopPropagation(); handleUpdateStatus(selectedIssue.id, 'Pending'); }}
+                      >
+                        Pending
+                      </button>
+                      <button 
+                        className={`resolution-btn ${selectedIssue.status === 'In Progress' ? 'active-progress' : ''}`} 
+                        onClick={(e) => { e.stopPropagation(); handleUpdateStatus(selectedIssue.id, 'In Progress'); }}
+                      >
+                        In Progress
+                      </button>
+                      <button 
+                        className={`resolution-btn ${selectedIssue.status === 'Resolved' ? 'active-resolved' : ''}`} 
+                        onClick={(e) => { e.stopPropagation(); handleUpdateStatus(selectedIssue.id, 'Resolved'); }}
+                      >
+                        Resolved
+                      </button>
+                    </div>
                 </div>
              </div>
           </div>

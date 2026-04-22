@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './dashboard.css';
+import Navbar from './navbar';
 
 const API = 'http://localhost:5000';
 
@@ -32,7 +33,7 @@ export default function Dashboard() {
     try {
       const res  = await fetch(`${API}/api/issues/stats`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      if (res.ok && data.total !== undefined) setStats(data);
+      if (res.ok && data.user) setStats(data.user);
     } catch { /* use defaults */ }
   };
 
@@ -60,35 +61,7 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard">
-
-      {/* ── NAVBAR ── */}
-      <nav className="navbar">
-        <div className="navbar-brand">
-          <div className="brand-icon">🏛️</div>
-          <div>
-            <h1>UrbanLink</h1>
-            <span className="tagline">Civic Issue Reporting Portal</span>
-          </div>
-        </div>
-
-        <div className="navbar-right">
-          {/* Quick nav links — visible without scrolling */}
-          <button className="nav-link-btn" onClick={() => navigate('/report-issue')}>
-            📝 Report Issue
-          </button>
-          <button className="nav-link-btn" onClick={() => navigate('/my-issues')}>
-            🔍 My Issues
-          </button>
-
-          <div className="navbar-user">
-            <div className="user-avatar">{getInitials(userName)}</div>
-            <span>{userName}</span>
-          </div>
-          <button className="logout-btn" onClick={() => { localStorage.clear(); navigate('/'); }}>
-            Logout
-          </button>
-        </div>
-      </nav>
+      <Navbar />
 
       {/* ── CONTENT ── */}
       <div className="dashboard-content">

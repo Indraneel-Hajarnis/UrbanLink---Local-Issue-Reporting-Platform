@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import './dashboard.css';
+import Navbar from './navbar';
 
 const API = 'http://localhost:5000';
 const COLORS = ['#138808', '#FF9933', '#0055a5'];
@@ -10,6 +11,7 @@ export default function MayorDashboard() {
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
   const [stats, setStats] = useState({ total:0, resolved:0, pending:0, progress:0 });
+  const [catDistribution, setCatDistribution] = useState({});
   const [unassigned, setUnassigned] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -32,7 +34,10 @@ export default function MayorDashboard() {
       const sData = await sRes.json();
       const uData = await uRes.json();
       
-      if (sRes.ok) setStats(sData);
+      if (sRes.ok) {
+        setStats(sData.community);
+        setCatDistribution(sData.categoryDistribution || {});
+      }
       if (uRes.ok) setUnassigned(uData.unassigned);
     } catch (err) {
       console.error(err);
@@ -69,28 +74,14 @@ export default function MayorDashboard() {
     { name: 'In Progress', value: stats.progress }
   ].filter(v => v.value > 0);
 
+  const catPieData = Object.entries(catDistribution).map(([name, value]) => ({ 
+    name: name.split(' ')[0], // Shorten labels
+    value 
+  })).sort((a,b) => b.value - a.value).slice(0, 6); // Top 6
+
   return (
     <div className="dashboard">
-      <nav className="navbar" style={{borderBottom:'4px solid var(--saffron)'}}>
-        <div className="navbar-brand">
-          <div className="brand-icon">🏛️</div>
-          <div>
-            <h1>UrbanLink Mayor</h1>
-            <span className="tagline">City-Wide Governance Dashboard</span>
-          </div>
-        </div>
-        <div className="navbar-right">
-          <button className="nav-link-btn" onClick={() => navigate('/community-reports')}>City Feed</button>
-          <button className="nav-link-btn" onClick={() => navigate('/ward-analytics')}>Analytics</button>
-          <button className="logout-btn" onClick={() => { localStorage.clear(); navigate('/'); }}>Logout</button>
-        </div>
-      </nav>
-
-      {unassigned.length > 0 && (
-        <div style={{background:'var(--error)', color:'white', padding:'12px 20px', textAlign:'center', fontWeight:600, fontSize:14}}>
-          ⚠️ ATTENTION: {unassigned.length} Wards ( {unassigned.join(', ')} ) have reported issues but no assigned Ward Manager.
-        </div>
-      )}
+      <Navbar />
 
       <div className="dashboard-content">
         <div className="welcome-banner" style={{background:'linear-gradient(135deg, var(--blue-deep) 0%, #003366 100%)'}}>
@@ -112,17 +103,17 @@ export default function MayorDashboard() {
                <div className={`alert ${msg.type}`} style={{marginBottom:20}}>{msg.text}</div>
              )}
              <form onSubmit={handleCreateManager} style={{display:'grid', gap:15}}>
-               <div className="input-group">
-                 <label>Manager Email</label>
-                 <input type="email" value={managerEmail} onChange={e => setManagerEmail(e.target.value)} required placeholder="manager@ward.gov" style={{padding:12, borderRadius:8, border:'1px solid var(--border)'}} />
-               </div>
-               <div className="input-group">
-                 <label>Temporary Password</label>
-                 <input type="password" value={managerPass} onChange={e => setManagerPass(e.target.value)} required placeholder="Minimum 6 chars" style={{padding:12, borderRadius:8, border:'1px solid var(--border)'}} />
-               </div>
+                <div className="input-group">
+                  <label>Manager Email</label>
+                  <input type="email" value={managerEmail} onChange={e => setManagerEmail(e.target.value)} required placeholder="manager@ward.gov" style={{padding:12, borderRadius:8, border:'1px solid var(--border)', background:'white', color:'black'}} />
+                </div>
+                <div className="input-group">
+                  <label>Temporary Password</label>
+                  <input type="password" value={managerPass} onChange={e => setManagerPass(e.target.value)} required placeholder="Minimum 6 chars" style={{padding:12, borderRadius:8, border:'1px solid var(--border)', background:'white', color:'black'}} />
+                </div>
                <div className="input-group">
                  <label>Assign to Ward</label>
-                 <select value={managerWard} onChange={e => setManagerWard(e.target.value)} required style={{padding:12, borderRadius:8, border:'1px solid var(--border)', background:'white'}}>
+                 <select value={managerWard} onChange={e => setManagerWard(e.target.value)} required style={{padding:12, borderRadius:8, border:'1px solid var(--border)', background:'white', color:'black'}}>
                    <option value="">Select a Ward</option>
                    <optgroup label="Unassigned/Reported">
                      {unassigned.map(w => <option key={w} value={w}>{w}</option>)}
@@ -132,35 +123,68 @@ export default function MayorDashboard() {
                    </optgroup>
                  </select>
                </div>
-               <button type="submit" className="action-btn primary" style={{marginTop:10}}>Deploy Manager</button>
+               <button type="submit" className="action-btn primary" style={{marginTop:10, color:'black'}}>Deploy Manager</button>
              </form>
           </div>
 
-          {/* Quick Stats Pie */}
-          <div className="card" style={{padding:30, display:'flex', flexDirection:'column', alignItems:'center'}}>
-            <h3 style={{marginBottom:20}}>City Status Distribution</h3>
-            <div style={{width:'100%', height:250}}>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pieData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                    {pieData.map((e,i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip />
-                  <Legend verticalAlign="bottom" height={36}/>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div style={{marginTop:20, width:'100%', display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
-                <div style={{padding:15, background:'var(--white)', borderRadius:12, border:'1px solid var(--border)', textAlign:'center'}}>
-                   <div style={{fontSize:12, color:'var(--text-muted)'}}>Total Reports</div>
-                   <div style={{fontSize:18, fontWeight:700}}>{stats.community}</div>
+           {/* Stats Section with two Donut Charts */}
+           <div className="card" style={{padding:30, display:'flex', flexDirection:'column', gap:30}}>
+              {/* Status Distribution */}
+              <div style={{textAlign:'center'}}>
+                <h3 style={{marginBottom:10, fontSize:16, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em'}}>City Status Distribution</h3>
+                <div style={{width:'100%', height:200}}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={pieData} innerRadius={55} outerRadius={75} paddingAngle={5} dataKey="value">
+                        <Cell fill="#138808" /> {/* Resolved - Green */}
+                        <Cell fill="#dc3545" /> {/* Pending - Red */}
+                        <Cell fill="#FF9933" /> {/* Progress - Orange */}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-                <div style={{padding:15, background:'var(--white)', borderRadius:12, border:'1px solid var(--border)', textAlign:'center'}}>
-                   <div style={{fontSize:12, color:'var(--text-muted)'}}>Active Issues</div>
-                   <div style={{fontSize:18, fontWeight:700, color:'var(--saffron-dark)'}}>{stats.pending + stats.progress}</div>
+                {/* Custom Legend */}
+                <div style={{display:'flex', justifyContent:'center', gap:15, marginTop:5, fontSize:12}}>
+                  <span style={{color:'#138808'}}>● Resolved</span>
+                  <span style={{color:'#dc3545'}}>● Pending</span>
+                  <span style={{color:'#FF9933'}}>● In Progress</span>
                 </div>
-            </div>
-          </div>
+              </div>
+
+              <div style={{height:'1px', background:'var(--border)', margin:'0 10%'}}></div>
+
+              {/* Category Distribution */}
+              <div style={{textAlign:'center'}}>
+                <h3 style={{marginBottom:10, fontSize:16, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em'}}>City Category Split</h3>
+                <div style={{width:'100%', height:200}}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={catPieData} innerRadius={55} outerRadius={75} paddingAngle={5} dataKey="value">
+                        {catPieData.map((e,i) => <Cell key={`cat-${i}`} fill={['#0055a5', '#FF9933', '#138808', '#9b59b6', '#e67e22', '#16a085'][i % 6]} />)}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{display:'flex', flexWrap:'wrap', justifyContent:'center', gap:10, marginTop:10, fontSize:10, color:'var(--text-muted)'}}>
+                  {catPieData.map((e,i) => (
+                    <span key={i}>● {e.name}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{marginTop:'auto', paddingTop:20, width:'100%', display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                  <div style={{padding:15, background:'var(--blue-light)', borderRadius:12, textAlign:'center'}}>
+                     <div style={{fontSize:11, color:'var(--text-muted)', textTransform:'uppercase'}}>Total City Reports</div>
+                     <div style={{fontSize:20, fontWeight:700, color:'var(--blue-deep)'}}>{stats.total}</div>
+                  </div>
+                  <div style={{padding:15, background:'var(--blue-light)', borderRadius:12, textAlign:'center'}}>
+                     <div style={{fontSize:11, color:'var(--text-muted)', textTransform:'uppercase'}}>Active Issues</div>
+                     <div style={{fontSize:20, fontWeight:700, color:'var(--saffron-dark)'}}>{stats.pending + stats.progress}</div>
+                  </div>
+              </div>
+           </div>
         </div>
       </div>
     </div>

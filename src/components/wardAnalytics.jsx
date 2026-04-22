@@ -5,6 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 import './dashboard.css';
+import Navbar from './navbar';
 
 const API = 'http://localhost:5000';
 const COLORS = ['#138808', '#FF9933', '#0055a5', '#9b59b6'];
@@ -72,6 +73,12 @@ export default function WardAnalytics() {
     const chartData = getChartData(wardName);
     const catData = getCategoryData(wardName);
 
+    const STATUS_COLORS = {
+      'Resolved':    '#138808', // Green
+      'Pending':     '#dc3545', // Red
+      'In Progress': '#FF9933'  // Orange/Saffron
+    };
+
     return (
       <div className="card" style={{padding:30, animation:'fadeInUp 0.5s ease'}}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:20}}>
@@ -95,7 +102,7 @@ export default function WardAnalytics() {
                   dataKey="value"
                 >
                   {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={`cell-${index}`} fill={STATUS_COLORS[entry.name] || '#ccc'} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -138,20 +145,7 @@ export default function WardAnalytics() {
 
   return (
     <div className="dashboard">
-      <nav className="navbar">
-        <div className="navbar-brand" onClick={() => navigate('/dashboard')} style={{cursor:'pointer'}}>
-          <div className="brand-icon">🏛️</div>
-          <div>
-            <h1>UrbanLink</h1>
-            <span className="tagline">Civic Analytics Dashboard</span>
-          </div>
-        </div>
-        <div className="navbar-right">
-          <button className="nav-link-btn" onClick={() => navigate('/dashboard')}>Dashboard</button>
-          <button className="nav-link-btn" onClick={() => navigate('/community-reports')}>Community</button>
-          <button className="logout-btn" onClick={() => { localStorage.clear(); navigate('/'); }}>Logout</button>
-        </div>
-      </nav>
+      <Navbar />
 
       <div className="dashboard-content">
         <div className="section-title">Ward Intelligence & Analytics</div>
@@ -205,7 +199,7 @@ export default function WardAnalytics() {
                 <select 
                   value={ward1} 
                   onChange={(e) => setWard1(e.target.value)}
-                  style={{width:'100%', padding:12, borderRadius:8, border:'1px solid var(--border)', background:'white', cursor:'pointer'}}
+                  style={{width:'100%', padding:12, borderRadius:8, border:'1px solid var(--border)', background:'white', color: 'var(--text-dark)', cursor:'pointer'}}
                 >
                   {wards.map(w => <option key={w} value={w}>{w}</option>)}
                 </select>
@@ -217,7 +211,7 @@ export default function WardAnalytics() {
                   <select 
                     value={ward2} 
                     onChange={(e) => setWard2(e.target.value)}
-                    style={{width:'100%', padding:12, borderRadius:8, border:'1px solid var(--border)', background:'white', cursor:'pointer'}}
+                    style={{width:'100%', padding:12, borderRadius:8, border:'1px solid var(--border)', background:'white', color: 'var(--text-dark)', cursor:'pointer'}}
                   >
                     {wards.filter(w => w !== ward1).map(w => <option key={w} value={w}>{w}</option>)}
                   </select>
