@@ -39,7 +39,11 @@ function Login() {
       if (res.ok) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('userName', data.name || email.split('@')[0]);
-        navigate('/dashboard');
+        localStorage.setItem('userRole', data.role);
+        
+        if (data.role === 'MAYOR') navigate('/mayor-dashboard');
+        else if (data.role === 'MANAGER') navigate('/manager-dashboard');
+        else navigate('/dashboard');
       } else {
         setError(data.message || 'Login failed. Please try again.');
       }
