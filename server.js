@@ -21,8 +21,28 @@ const SECRET = process.env.JWT_SECRET || 'urbanlink_secret_key';
 
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase    = createClient(supabaseUrl, supabaseKey);
+
+// Ensure Supabase Storage bucket exists
+async function initStorage() {
+  try {
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+    if (listError) throw listError;
+
+    const exists = buckets.find(b => b.name === 'issue-photos');
+    if (!exists) {
+      console.log('📦 Creating "issue-photos" storage bucket...');
+      const { error: createError } = await supabase.storage.createBucket('issue-photos', { public: true });
+      if (createError) console.error('❌ Error creating bucket:', createError.message);
+    } else {
+      console.log('✅ "issue-photos" bucket ready.');
+    }
+  } catch (err) {
+    console.error('⚠️ Supabase Storage init error:', err.message);
+  }
+}
+initStorage();
 
 // Create uploads directory
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
@@ -59,7 +79,6 @@ const upload = multer({
   },
 });
 
-// Logic will now use Supabase instead of these in-memory stores
 
 // Auth middleware
 async function authMiddleware(req, res, next) {
@@ -89,12 +108,11 @@ async function authMiddleware(req, res, next) {
       .single();
 
     if (profile) {
-      role = profile.role;
+      role = profile.role === 'user' ? 'CITIZEN' : profile.role;
       managedWard = profile.managed_ward;
     } else if (user.email === 'citymayor@gmail.com') {
-      // Auto-init Mayor profile if it doesn't exist
       role = 'MAYOR';
-      await supabase.from('profiles').insert({ id: user.id, email: user.email, role: 'MAYOR' });
+      await supabase.from('profiles').upsert({ id: user.id, email: user.email, role: 'MAYOR' });
     }
 
     req.user = { 
@@ -110,26 +128,79 @@ async function authMiddleware(req, res, next) {
   }
 }
 
+// Locality to Ward Mapping (Mumbai & MMR)
+const WARD_MAPPING = [
+  // BMC Wards
+  { ward: 'A', regex: /Colaba|Cuffe Parade|Fort|Nariman Point|Marine Drive|Churchgate/i },
+  { ward: 'B', regex: /Sandhurst Road|P D'Mello|Mohammed Ali|Dongri|Masjid Bunder/i },
+  { ward: 'C', regex: /Marine Lines|Kalbadevi|Bhuleshwar|Chandanwadi|Princess Street/i },
+  { ward: 'D', regex: /Grant Road|Malabar Hill|Tardeo|Breach Candy|Kemps Corner|Walkeshwar|Girgaon/i },
+  { ward: 'E', regex: /Byculla|Agripada|Mazgaon|Reay Road|Mumbai Central|Madanpura/i },
+  { ward: 'F/N', regex: /Matunga|Sion|Wadala|Antop Hill/i },
+  { ward: 'F/S', regex: /Parel|Sewri|Naigaon|Lalbaug/i },
+  { ward: 'G/N', regex: /Dadar|Mahim|Dharavi|Matunga West/i },
+  { ward: 'G/S', regex: /Worli|Prabhadevi|Lower Parel|Elphinstone Road|Curry Road/i },
+  { ward: 'H/E', regex: /Santacruz (E|East)|Khar (E|East)|Bandra (E|East)|Kalina|Vakola|Kherwadi/i },
+  { ward: 'H/W', regex: /Bandra (W|West)|Khar (W|West)|Santacruz (W|West)|Juhu Tara|Pali Hill/i },
+  { ward: 'K/E', regex: /Andheri (E|East)|Jogeshwari (E|East)|Vile Parle (E|East)|Gundavali|Marol|Saki Naka|Sahar|MIDC/i },
+  { ward: 'K/W', regex: /Andheri (W|West)|Juhu|Versova|Vile Parle (W|West)|Oshiwara|Lokhandwala/i },
+  { ward: 'L', regex: /Kurla|Chandivali|Saki Naka|Powai|Chunabhatti/i },
+  { ward: 'M/E', regex: /Govandi|Mankhurd|Deonar|Trombay|Baiganwadi/i },
+  { ward: 'M/W', regex: /Chembur|Mahul|Tilak Nagar|Shell Colony/i },
+  { ward: 'N', regex: /Ghatkopar|Vidyavihar|Pant Nagar|Vikhroli/i },
+  { ward: 'P/N', regex: /Malad|Marve|Aksa|Madh|Rathodi/i },
+  { ward: 'P/S', regex: /Goregaon|Aarey|Motilal Nagar|Bangur Nagar/i },
+  { ward: 'R/C', regex: /Borivali|Gorai|Eksar|Shimpoli/i },
+  { ward: 'R/N', regex: /Dahisar|IC Colony|Rawalpada/i },
+  { ward: 'R/S', regex: /Kandivali|Charkop|Thakur Village|Poisar/i },
+  { ward: 'S', regex: /Bhandup|Powai|Kanjurmarg|Vikhroli|Nahur/i },
+  { ward: 'T', regex: /Mulund|Nahur/i },
+  // Other MMR Corporations
+  { ward: 'TMC', regex: /Thane|Majiwada|Ghodbunder|Kalwa|Mumbra|Shilphata|Wagle Estate|Naupada|Pokhran/i },
+  { ward: 'NMMC', regex: /Navi Mumbai|Vashi|Nerul|Belapur|Airoli|Sanpada|Koparkhairane|Ghansoli|Turbhe|Juinagar|Seawoods/i },
+  { ward: 'KDMC', regex: /Kalyan|Dombivli|Thakurli|Titwala|Mohone/i },
+  { ward: 'MBMC', regex: /Mira Road|Bhayandar|Kashimira/i },
+  { ward: 'VVMC', regex: /Vasai|Virar|Nallasopara|Naigaon/i },
+  { ward: 'PMC', regex: /Panvel|Kharghar|Kalamboli|Kamothe|New Panvel/i },
+  { ward: 'UMC', regex: /Ulhasnagar/i },
+];
+
+function getWardFromLocation(text) {
+  if (!text) return 'Unknown';
+  for (const entry of WARD_MAPPING) {
+    if (entry.regex.test(text)) return entry.ward;
+  }
+  return null;
+}
+
 // AI classification (now including Ward detection)
-async function classifyImage(filePath, locationText = '') {
+async function classifyImage(filePath, locationText = '', userCategory = '') {
   try {
     const base64Data  = fs.readFileSync(filePath).toString('base64');
     const ext         = path.extname(filePath).toLowerCase().replace('.', '');
     const mediaTypeMap = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', webp:'image/webp', gif:'image/gif' };
     const mediaType    = mediaTypeMap[ext] || 'image/jpeg';
 
-    const prompt = `You are a highly accurate civic issue and location classification AI for the Mumbai Metropolitan Region (MMR).
+    // Try hardcoded mapping first
+    let detectedWard = getWardFromLocation(locationText);
+
+    const prompt = `You are an expert civic issue and location classification AI for the Mumbai Metropolitan Region (MMR).
 Analyze this image and the provided location text: "${locationText}".
+${userCategory ? `The user has manually selected the category: "${userCategory}".` : ''}
+${detectedWard ? `Our system suggests this location belongs to Ward: "${detectedWard}".` : ''}
 
 CRITICAL INSTRUCTIONS:
-1. Pothole: Specifically look for holes, pits, or depressions in the road surface. Even if the image is slightly blurry, if it shows road damage, categorize as "Pothole".
-2. Garbage/Waste Dumping: Look for piles of trash, overflowing bins, or littered areas.
-3. Classify the ISSUE into EXACTLY ONE of these categories:
-- Pothole, Garbage/Waste Dumping, Broken Streetlight, Waterlogging/Flooding, Damaged Footpath/Pavement, Illegal Construction, Open Drain/Sewer, Fallen Tree/Branch, Graffiti/Vandalism, Traffic Signal Fault, Water Leakage/Pipe Burst, Encroachment, Other Civic Issue.
+1. Category Classification:
+   - Identify the issue into EXACTLY ONE of these categories: Pothole, Garbage/Waste Dumping, Broken Streetlight, Waterlogging/Flooding, Damaged Footpath/Pavement, Illegal Construction, Open Drain/Sewer, Fallen Tree/Branch, Graffiti/Vandalism, Traffic Signal Fault, Water Leakage/Pipe Burst, Encroachment, Other Civic Issue.
+   ${userCategory ? `- If the image corresponds at all to the user's selected category "${userCategory}", then USE THAT CATEGORY. Only override it if the image is definitely something else.` : ''}
+   - Pothole: Specifically look for depressions in the road.
+   - Garbage: Look for piles of waste or littered areas.
 
-2. Identify the administrative WARD or MUNICIPAL CORPORATION based on the location:
-- BMC Wards: A, B, C, D, E, F/N, F/S, G/N, G/S, H/E, H/W, K/E, K/W, L, M/E, M/W, N, P/N, P/S, R/C, R/N, R/S, S, T.
-- Other MMR: TMC (Thane), NMMC (Navi Mumbai), KDMC (Kalyan), MBMC (Mira-Bhayandar), VVMC (Vasai-Virar), PMC (Panvel), UMC (Ulhasnagar).
+2. Ward/Location Identification:
+   - Identify the EXACT administrative WARD or MUNICIPAL CORPORATION based on "${locationText}".
+   ${detectedWard ? `- We strongly suspect this is ward "${detectedWard}". Confirm if this matches the visual context.` : ''}
+   - BMC Wards (Mumbai City/Suburbs): A, B, C, D, E, F/N, F/S, G/N, G/S, H/E, H/W, K/E, K/W, L, M/E, M/W, N, P/N, P/S, R/C, R/N, R/S, S, T.
+   - Other MMR: TMC (Thane), NMMC (Navi Mumbai), KDMC (Kalyan-Dombivli), MBMC (Mira-Bhayandar), VVMC (Vasai-Virar), PMC (Panvel), UMC (Ulhasnagar).
 
 Respond with ONLY a JSON object:
 {"category": "<category>", "confidence": "<high|medium|low>", "description": "<one sentence>", "ward": "<Ward Name or Municipal Corp>"}`;
@@ -259,6 +330,7 @@ app.post('/api/login', async (req, res) => {
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
 
     let role = profile?.role || 'CITIZEN';
+    if (role === 'user')  role = 'CITIZEN';
     if (email === 'citymayor@gmail.com') role = 'MAYOR';
 
     res.json({ 
@@ -274,20 +346,23 @@ app.post('/api/login', async (req, res) => {
 // Submit issue
 app.post('/api/issues', authMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    const { title, description, location, date } = req.body;
+    const { title, description, location, date, category: userCategory } = req.body;
     if (!title || !location || !date) return res.status(400).json({ message: 'Title, location and date are required.' });
 
-    let category = 'Other Civic Issue', confidence = 'low', aiDescription = '';
-    let ward = 'Unknown';
+    let category = userCategory || 'Other Civic Issue', confidence = 'low', aiDescription = '';
+    let ward = getWardFromLocation(location) || 'Unknown';
     let photoUrl = null;
 
     if (req.file) {
       // 1. AI Classification
-      const result  = await classifyImage(req.file.path, location);
+      const result  = await classifyImage(req.file.path, location, userCategory);
       category      = result.category;
       confidence    = result.confidence;
       aiDescription = result.aiDescription;
-      ward          = result.ward;
+      // Use AI ward only if we didn't find one in our mapping or if AI is high confidence
+      if (ward === 'Unknown' || result.confidence === 'high') {
+         ward = result.ward;
+      }
 
       // 2. Upload to Supabase Storage
       const fileExt = path.extname(req.file.originalname);
@@ -379,30 +454,56 @@ app.get('/api/issues/stats', authMiddleware, async (req, res) => {
       return Math.round((resolved / filtered.length) * 100);
     };
 
+    // City-wide status aggregation
+    const communityStats = {
+      total:    allIssues.length,
+      resolved: allIssues.filter(i => i.status === 'Resolved').length,
+      pending:  allIssues.filter(i => i.status === 'Pending').length,
+      progress: allIssues.filter(i => i.status === 'In Progress').length
+    };
+
+    // City-wide category aggregation
+    const allCategories = {};
+    allIssues.forEach(i => {
+      if (i.category) allCategories[i.category] = (allCategories[i.category] || 0) + 1;
+    });
+
     res.json({
-      total:     mine.length,
-      resolved:  mine.filter(i => i.status === 'Resolved').length,
-      pending:   mine.filter(i => i.status === 'Pending').length,
-      progress:  mine.filter(i => i.status === 'In Progress').length,
-      community: allIssues.length,
+      user: {
+        total:     mine.length,
+        resolved:  mine.filter(i => i.status === 'Resolved').length,
+        pending:   mine.filter(i => i.status === 'Pending').length,
+        progress:  mine.filter(i => i.status === 'In Progress').length,
+      },
+      community: communityStats,
       categories: {
         infrastructure: getProg(groups.infrastructure),
         sanitation:     getProg(groups.sanitation),
         utilities:      getProg(groups.utilities)
-      }
+      },
+      categoryDistribution: allCategories
     });
   } catch (err) {
     res.status(500).json({ message: 'Error fetching stats.' });
   }
 });
 
-// All issues (community)
+// All issues (filtered based on role)
 app.get('/api/issues', authMiddleware, async (req, res) => {
   try {
-    const { data, error } = await supabase.from('issues').select('*').order('submitted_at', { ascending: false });
+    let query = supabase.from('issues').select('*').order('submitted_at', { ascending: false });
+    
+    // Filter by ward for Managers
+    if (req.user.role === 'MANAGER' && req.user.managedWard) {
+      console.log(`🔒 Filtering issues for Ward Manager: ${req.user.managedWard}`);
+      query = query.eq('ward', req.user.managedWard);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     res.json({ issues: data.map(formatIssue) });
   } catch (err) {
+    console.error('Error fetching issues:', err);
     res.status(500).json({ message: 'Error fetching issues.' });
   }
 });
@@ -413,17 +514,57 @@ app.put('/api/issues/:id/status', authMiddleware, async (req, res) => {
     const { status } = req.body;
     if (!['Pending','In Progress','Resolved'].includes(status)) return res.status(400).json({ message: 'Invalid status.' });
     
-    const { data, error } = await supabase
-      .from('issues')
-      .update({ status })
-      .eq('id', req.params.id)
-      .select()
-      .single();
+    // Check permissions
+    if (req.user.role !== 'MAYOR' && req.user.role !== 'MANAGER') {
+       return res.status(403).json({ message: 'Forbidden: Only Mayor or Manager can update status.' });
+    }
 
-    if (error) throw error;
-    res.json({ message: 'Status updated.', issue: formatIssue(data) });
+    const { data: issue, error: fetchError } = await supabase.from('issues').select('ward').eq('id', req.params.id).single();
+    if (fetchError || !issue) return res.status(404).json({ message: 'Issue not found.' });
+
+    // Normalization helper for consistent ward matching
+    const normalize = (w) => (w || '').toUpperCase().replace(/^BMC\s+/, '').trim();
+    
+    console.log(`[Status Update] User: ${req.user.email} | Role: ${req.user.role} | ManagedWard: ${req.user.managedWard} (Normalized: ${normalize(req.user.managedWard)})`);
+    console.log(`[Status Update] Issue: ${req.params.id} | IssueWard: ${issue.ward} (Normalized: ${normalize(issue.ward)})`);
+
+    if (req.user.role === 'MANAGER' && normalize(issue.ward) !== normalize(req.user.managedWard)) {
+       console.log(`[Status Update] DENIED: Ward mismatch.`);
+       return res.status(403).json({ message: 'Forbidden: You can only update issues in your assigned ward.' });
+    }
+
+    let updateResult;
+    try {
+      updateResult = await supabase
+        .from('issues')
+        .update({ status })
+        .eq('id', req.params.id)
+        .select();
+    } catch (dbErr) {
+      console.error('[Status Update] Execution Crash:', dbErr);
+      return res.status(500).json({ message: `Database execution error: ${dbErr.message}` });
+    }
+
+    const { data: updateData, error: updateError } = updateResult;
+
+    if (updateError) {
+      console.error('[Status Update] SQL Error:', updateError);
+      return res.status(updateError.status || 500).json({ message: `SQL Error: ${updateError.message}`, details: updateError });
+    }
+    
+    if (!updateData || updateData.length === 0) {
+      console.warn(`[Status Update] WARNING: Update may have worked but SELECT returned empty. This often happens if RLS (Row Level Security) is blocking the SELECT action.`);
+      // Try to return a skeleton success if we can't select
+      return res.json({ 
+        message: 'Status updated, but RLS blocked data retrieval. Please refresh to see changes.', 
+        issue: { id: req.params.id, status } 
+      });
+    }
+
+    res.json({ message: 'Status updated.', issue: formatIssue(updateData[0]) });
   } catch (err) {
-    res.status(500).json({ message: 'Error updating status.' });
+    console.error('[Status Update] GLOBAL CRASH:', err);
+    res.status(500).json({ message: `Internal Server Error: ${err.message}` });
   }
 });
 
@@ -433,36 +574,24 @@ app.get('/api/issues/analytics', authMiddleware, async (req, res) => {
     const { data: allIssues, error } = await supabase.from('issues').select('status, category, ward');
     if (error) throw error;
 
-    // Get unique wards
-    const wards = [...new Set(allIssues.map(i => i.ward || 'Unknown'))];
-    
+    const normalize = (w) => (w || '').toUpperCase().replace(/^BMC\s+/, '').trim();
     const wardData = {};
-    wards.forEach(w => {
-      const wardIssues = allIssues.filter(i => (i.ward || 'Unknown') === w);
-      
-      // Status breakdown
-      const statusCounts = {
-        'Resolved':    wardIssues.filter(i => i.status === 'Resolved').length,
-        'Pending':     wardIssues.filter(i => i.status === 'Pending').length,
-        'In Progress': wardIssues.filter(i => i.status === 'In Progress').length
-      };
-
-      // Category breakdown
-      const categories = ['Pothole', 'Garbage/Waste Dumping', 'Broken Streetlight', 'Waterlogging/Flooding', 'Damaged Footpath/Pavement', 'Illegal Construction', 'Open Drain/Sewer', 'Fallen Tree/Branch', 'Graffiti/Vandalism', 'Traffic Signal Fault', 'Water Leakage/Pipe Burst', 'Encroachment', 'Other Civic Issue'];
-      const categoryCounts = {};
-      categories.forEach(c => {
-        categoryCounts[c] = wardIssues.filter(i => i.category === c).length;
-      });
-
-      wardData[w] = {
-        total:    wardIssues.length,
-        status:   statusCounts,
-        category: categoryCounts,
-        resolutionRate: wardIssues.length > 0 
-          ? Math.round((statusCounts.Resolved / wardIssues.length) * 100) 
-          : 0
-      };
+    
+    allIssues.forEach(i => {
+      const w = normalize(i.ward) || 'Unknown';
+      if (!wardData[w]) {
+        wardData[w] = { total: 0, status: { 'Resolved': 0, 'Pending': 0, 'In Progress': 0 }, category: {} };
+      }
+      const wd = wardData[w];
+      wd.total++;
+      wd.status[i.status] = (wd.status[i.status] || 0) + 1;
+      if (i.category) wd.category[i.category] = (wd.category[i.category] || 0) + 1;
     });
+
+    for (const w in wardData) {
+      const wd = wardData[w];
+      wd.resolutionRate = wd.total > 0 ? Math.round((wd.status.Resolved / wd.total) * 100) : 0;
+    }
 
     res.json({ wards: wardData });
   } catch (err) {
@@ -527,9 +656,13 @@ app.get('/api/mayor/unassigned-wards', authMiddleware, async (req, res) => {
     }
     
     const reportedWards = [...new Set((issues || []).map(i => i.ward).filter(Boolean))];
-    const managedWards  = (managers || []).map(m => m.managed_ward);
+    const managedWards  = (managers || []).map(m => m.managed_ward || '');
     
-    const unassigned = reportedWards.filter(w => !managedWards.includes(w));
+    // Normalization helper
+    const normalize = (w) => w.toUpperCase().replace(/^BMC\s+/, '').trim();
+    const normalizedManaged = managedWards.map(normalize);
+    
+    const unassigned = reportedWards.filter(w => !normalizedManaged.includes(normalize(w)));
     res.json({ unassigned });
   } catch (err) {
     console.error('Unassigned Wards error:', err.message);
