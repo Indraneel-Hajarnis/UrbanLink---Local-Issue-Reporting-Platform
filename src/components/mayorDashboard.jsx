@@ -119,7 +119,7 @@ export default function MayorDashboard() {
                      {unassigned.map(w => <option key={w} value={w}>{w}</option>)}
                    </optgroup>
                    <optgroup label="BMC Wards">
-                     {['A','B','C','D','E','F/N','F/S','G/N','G/S','H/E','H/W','K/E','K/W','L','M/E','M/W','N','P/N','P/S','R/C','R/N','R/S','S','T'].map(w => <option key={`bmc-${w}`} value={`BMC ${w}`}>BMC {w} Ward</option>)}
+                     {['A','B','C','D','E','F/N','F/S','G/N','G/S','H/E','H/W','K/E','K/W','L','M/E','M/W','N','P/N','P/S','R/C','R/N','R/S','S','T'].map(w => <option key={`bmc-${w}`} value={w}>BMC {w} Ward</option>)}
                    </optgroup>
                  </select>
                </div>

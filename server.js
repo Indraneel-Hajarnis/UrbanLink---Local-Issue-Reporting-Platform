@@ -165,6 +165,10 @@ const WARD_MAPPING = [
   { ward: 'UMC', regex: /Ulhasnagar/i },
 ];
 
+function normalizeWard(w) {
+  return (w || '').toUpperCase().replace(/^BMC\s+/, '').trim();
+}
+
 function getWardFromLocation(text) {
   if (!text) return 'Unknown';
   for (const entry of WARD_MAPPING) {
@@ -227,7 +231,11 @@ Respond with ONLY a JSON object:
     ];
     
     let finalCategory = parsed.category;
-    const match = officialCategories.find(c => c.toLowerCase() === finalCategory.toLowerCase().trim());
+    // Improved matching: check if AI category contains or is contained by official categories
+    const match = officialCategories.find(c => 
+      finalCategory.toLowerCase().includes(c.toLowerCase()) || 
+      c.toLowerCase().includes(finalCategory.toLowerCase().trim())
+    );
     if (match) finalCategory = match;
     else finalCategory = 'Other Civic Issue';
 
@@ -235,7 +243,7 @@ Respond with ONLY a JSON object:
       category: finalCategory, 
       confidence: parsed.confidence, 
       aiDescription: parsed.description,
-      ward: parsed.ward || 'Unknown'
+      ward: normalizeWard(parsed.ward) || 'Unknown'
     };
   } catch (err) {
     console.error('Gemini classification error:', err.message);
@@ -396,7 +404,7 @@ app.post('/api/issues', authMiddleware, upload.single('photo'), async (req, res)
         confidence, 
         ai_description: aiDescription,
         status: 'Pending',
-        ward,
+        ward: normalizeWard(ward),
         user_email: req.user.email,
         user_name: req.user.name,
         user_id: req.user.sub // Assuming Supabase auth or similar sub ID
@@ -495,8 +503,9 @@ app.get('/api/issues', authMiddleware, async (req, res) => {
     
     // Filter by ward for Managers
     if (req.user.role === 'MANAGER' && req.user.managedWard) {
-      console.log(`🔒 Filtering issues for Ward Manager: ${req.user.managedWard}`);
-      query = query.eq('ward', req.user.managedWard);
+      const normalizedManaged = normalizeWard(req.user.managedWard);
+      console.log(`🔒 Filtering issues for Ward Manager: ${normalizedManaged}`);
+      query = query.eq('ward', normalizedManaged);
     }
 
     const { data, error } = await query;
@@ -522,13 +531,10 @@ app.put('/api/issues/:id/status', authMiddleware, async (req, res) => {
     const { data: issue, error: fetchError } = await supabase.from('issues').select('ward').eq('id', req.params.id).single();
     if (fetchError || !issue) return res.status(404).json({ message: 'Issue not found.' });
 
-    // Normalization helper for consistent ward matching
-    const normalize = (w) => (w || '').toUpperCase().replace(/^BMC\s+/, '').trim();
-    
-    console.log(`[Status Update] User: ${req.user.email} | Role: ${req.user.role} | ManagedWard: ${req.user.managedWard} (Normalized: ${normalize(req.user.managedWard)})`);
-    console.log(`[Status Update] Issue: ${req.params.id} | IssueWard: ${issue.ward} (Normalized: ${normalize(issue.ward)})`);
+    console.log(`[Status Update] User: ${req.user.email} | Role: ${req.user.role} | ManagedWard: ${req.user.managedWard} (Normalized: ${normalizeWard(req.user.managedWard)})`);
+    console.log(`[Status Update] Issue: ${req.params.id} | IssueWard: ${issue.ward} (Normalized: ${normalizeWard(issue.ward)})`);
 
-    if (req.user.role === 'MANAGER' && normalize(issue.ward) !== normalize(req.user.managedWard)) {
+    if (req.user.role === 'MANAGER' && normalizeWard(issue.ward) !== normalizeWard(req.user.managedWard)) {
        console.log(`[Status Update] DENIED: Ward mismatch.`);
        return res.status(403).json({ message: 'Forbidden: You can only update issues in your assigned ward.' });
     }
@@ -574,11 +580,10 @@ app.get('/api/issues/analytics', authMiddleware, async (req, res) => {
     const { data: allIssues, error } = await supabase.from('issues').select('status, category, ward');
     if (error) throw error;
 
-    const normalize = (w) => (w || '').toUpperCase().replace(/^BMC\s+/, '').trim();
     const wardData = {};
     
     allIssues.forEach(i => {
-      const w = normalize(i.ward) || 'Unknown';
+      const w = normalizeWard(i.ward) || 'Unknown';
       if (!wardData[w]) {
         wardData[w] = { total: 0, status: { 'Resolved': 0, 'Pending': 0, 'In Progress': 0 }, category: {} };
       }
@@ -624,7 +629,7 @@ app.post('/api/mayor/create-manager', authMiddleware, async (req, res) => {
         id: authData.user.id, 
         email, 
         role: 'MANAGER', 
-        managed_ward: ward 
+        managed_ward: normalizeWard(ward) 
       });
 
     if (profileError) throw profileError;
@@ -658,11 +663,8 @@ app.get('/api/mayor/unassigned-wards', authMiddleware, async (req, res) => {
     const reportedWards = [...new Set((issues || []).map(i => i.ward).filter(Boolean))];
     const managedWards  = (managers || []).map(m => m.managed_ward || '');
     
-    // Normalization helper
-    const normalize = (w) => w.toUpperCase().replace(/^BMC\s+/, '').trim();
-    const normalizedManaged = managedWards.map(normalize);
-    
-    const unassigned = reportedWards.filter(w => !normalizedManaged.includes(normalize(w)));
+    const normalizedManaged = managedWards.map(normalizeWard);
+    const unassigned = reportedWards.filter(w => !normalizedManaged.includes(normalizeWard(w)));
     res.json({ unassigned });
   } catch (err) {
     console.error('Unassigned Wards error:', err.message);

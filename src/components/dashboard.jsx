@@ -33,7 +33,13 @@ export default function Dashboard() {
     try {
       const res  = await fetch(`${API}/api/issues/stats`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      if (res.ok && data.user) setStats(data.user);
+      if (res.ok) {
+        setStats({
+          ...data.user,
+          community: data.community?.total || 0,
+          categories: data.categories || { infrastructure: 0, sanitation: 0, utilities: 0 }
+        });
+      }
     } catch { /* use defaults */ }
   };
 
