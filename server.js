@@ -42,7 +42,6 @@ async function initStorage() {
     console.error('⚠️ Supabase Storage init error:', err.message);
   }
 }
-initStorage();
 
 // Create uploads directory
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
@@ -74,8 +73,12 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    ['image/jpeg','image/png','image/webp','image/gif'].includes(file.mimetype)
-      ? cb(null, true) : cb(new Error('Only image files are allowed.'));
+    const allowed = ['image/jpeg','image/png','image/webp','image/gif','image/bmp','image/tiff'];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type: ${file.mimetype}. Only JPEG, PNG, WEBP, and GIF are allowed.`));
+    }
   },
 });
 
@@ -352,7 +355,17 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Submit issue
-app.post('/api/issues', authMiddleware, upload.single('photo'), async (req, res) => {
+app.post('/api/issues', authMiddleware, (req, res, next) => {
+  upload.single('photo')(req, res, (err) => {
+    if (err) {
+      console.error('Multer error:', err.message);
+      return res.status(400).json({ 
+        message: err instanceof multer.MulterError ? 'File upload limit exceeded (Max 10MB).' : err.message 
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     const { title, description, location, date, category: userCategory } = req.body;
     if (!title || !location || !date) return res.status(400).json({ message: 'Title, location and date are required.' });
@@ -672,7 +685,23 @@ app.get('/api/mayor/unassigned-wards', authMiddleware, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`\n✅  UrbanLink server → http://localhost:${PORT}`);
-  console.log(`    Health : http://localhost:${PORT}/api/health\n`);
-});
+// Initialize Storage and then start server
+try {
+  await initStorage();
+  const server = app.listen(PORT, () => {
+    console.log(`\n✅  UrbanLink server → http://localhost:${PORT}`);
+    console.log(`    Health : http://localhost:${PORT}/api/health\n`);
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use. Please kill the process using this port and try again.`);
+    } else {
+      console.error('❌ Server error:', err);
+    }
+    process.exit(1);
+  });
+} catch (err) {
+  console.error('❌ Failed to start server:', err);
+  process.exit(1);
+}
